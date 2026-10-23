@@ -1,0 +1,269 @@
+// Pothigai Naturals data model.
+// Bilingual fields use the En / Ta suffix. Tamil fields are optional: when a
+// Tamil translation is missing the storefront falls back to English and keeps
+// the Tamil URL out of the sitemap / hreflang set (see src/lib/locales.ts).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CUSTOMER
+  ADMIN
+}
+
+enum PostStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  COD
+}
+
+enum PaymentStatus {
+  UNPAID
+  PAID
+  REFUNDED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String?
+  role         Role     @default(CUSTOMER)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Category {
+  id                 String    @id @default(cuid())
+  slug               String    @unique
+  sortOrder          Int       @default(0)
+  nameEn             String
+  nameTa             String?
+  h1En               String?
+  h1Ta               String?
+  seoTitleEn         String?
+  seoTitleTa         String?
+  metaDescriptionEn  String?
+  metaDescriptionTa  String?
+  introEn            String?   @db.Text
+  introTa            String?   @db.Text
+  // Internal keyword guidance for editors. Never rendered on the storefront.
+  primaryKeyword     String?
+  supportingKeywords String[]  @default([])
+  // [{ qEn, aEn, qTa, aTa }]
+  faqs               Json      @default("[]")
+  imageUrl           String?
+  imageAltEn         String?
+  imageAltTa         String?
+  canonicalOverride  String?
+  robotsIndex        Boolean   @default(true)
+  isPublished        Boolean   @default(true)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  products           Product[]
+  blogPosts          BlogPost[]
+}
+
+model Product {
+  id                  String         @id @default(cuid())
+  slug                String         @unique
+  sku                 String         @unique
+  categoryId          String
+  category            Category       @relation(fields: [categoryId], references: [id])
+  nameEn              String
+  nameTa              String?
+  shortDescriptionEn  String?
+  shortDescriptionTa  String?
+  descriptionEn       String?        @db.Text
+  descriptionTa       String?        @db.Text
+  seoTitleEn          String?
+  seoTitleTa          String?
+  metaDescriptionEn   String?
+  metaDescriptionTa   String?
+  price               Decimal        @db.Decimal(10, 2)
+  salePrice           Decimal?       @db.Decimal(10, 2)
+  currency            String         @default("INR")
+  stockQuantity       Int            @default(0)
+  packSize            Decimal?       @db.Decimal(10, 3)
+  packUnit            String?
+  ingredientsEn       String?        @db.Text
+  ingredientsTa       String?        @db.Text
+  // Origin is only shown when originVerified is true.
+  originEn            String?
+  originTa            String?
+  originVerified      Boolean        @default(false)
+  extractionMethodEn  String?
+  extractionMethodTa  String?
+  gradeEn             String?
+  gradeTa             String?
+  storageEn           String?        @db.Text
+  storageTa           String?        @db.Text
+  cookingEn           String?        @db.Text
+  cookingTa           String?        @db.Text
+  allergensEn         String?        @db.Text
+  allergensTa         String?        @db.Text
+  shippingInfoEn      String?        @db.Text
+  shippingInfoTa      String?        @db.Text
+  canonicalOverride   String?
+  robotsIndex         Boolean        @default(true)
+  isPublished         Boolean        @default(false)
+  isFeatured          Boolean        @default(false)
+  publishedAt         DateTime?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  images              ProductImage[]
+  orderItems          OrderItem[]
+  blogPosts           BlogPost[]     @relation("BlogPostProducts")
+
+  @@index([categoryId, isPublished])
+}
+
+model ProductImage {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  url       String
+  altEn     String?
+  altTa     String?
+  width     Int?
+  height    Int?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([productId])
+}
+
+model BlogPost {
+  id                  String     @id @default(cuid())
+  slug                String     @unique
+  titleEn             String
+  titleTa             String?
+  excerptEn           String?    @db.Text
+  excerptTa           String?    @db.Text
+  // Markdown. Raw HTML is never rendered by the storefront.
+  bodyEn              String?    @db.Text
+  bodyTa              String?    @db.Text
+  authorName          String     @default("Pothigai Naturals")
+  featuredImageUrl    String?
+  featuredImageAltEn  String?
+  featuredImageAltTa  String?
+  seoTitleEn          String?
+  seoTitleTa          String?
+  metaDescriptionEn   String?
+  metaDescriptionTa   String?
+  categoryId          String?
+  category            Category?  @relation(fields: [categoryId], references: [id])
+  relatedProducts     Product[]  @relation("BlogPostProducts")
+  status              PostStatus @default(DRAFT)
+  canonicalOverride   String?
+  robotsIndex         Boolean    @default(true)
+  publishedAt         DateTime?
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+}
+
+// Editable copy for fixed pages (home, about, contact) per locale.
+model PageContent {
+  id              String   @id @default(cuid())
+  key             String
+  locale          String
+  seoTitle        String
+  metaDescription String
+  h1              String
+  // Page-specific structured copy; see src/lib/validation.ts for shapes.
+  body            Json
+  robotsIndex     Boolean  @default(true)
+  updatedAt       DateTime @updatedAt
+
+  @@unique([key, locale])
+}
+
+// Single row (id = "default"). Every contact / business field is optional so
+// nothing unverified is ever published.
+model SiteSettings {
+  id                 String   @id @default("default")
+  contactEmail       String?
+  contactPhone       String?
+  whatsappNumber     String?
+  streetAddress      String?
+  addressLocality    String?
+  addressRegion      String?
+  postalCode         String?
+  showAddress        Boolean  @default(false)
+  deliveryInfoEn     String?  @db.Text
+  deliveryInfoTa     String?  @db.Text
+  returnPolicyEn     String?  @db.Text
+  returnPolicyTa     String?  @db.Text
+  flatShippingFee    Decimal  @default(0) @db.Decimal(10, 2)
+  codEnabled         Boolean  @default(true)
+  socialLinks        String[] @default([])
+  updatedAt          DateTime @updatedAt
+}
+
+// Permanent redirects for renamed slugs and obsolete URLs. Paths are
+// locale-less ("/oils/old-slug/") and applied to every locale.
+model SlugRedirect {
+  id        String   @id @default(cuid())
+  fromPath  String   @unique
+  toPath    String
+  createdAt DateTime @default(now())
+}
+
+model Order {
+  id                 String        @id @default(cuid())
+  orderNumber        String        @unique
+  // Unguessable token used for the customer's confirmation page.
+  publicToken        String        @unique
+  status             OrderStatus   @default(PENDING)
+  paymentMethod      PaymentMethod @default(COD)
+  paymentStatus      PaymentStatus @default(UNPAID)
+  customerName       String
+  phone              String
+  email              String?
+  addressLine1       String
+  addressLine2       String?
+  city               String
+  state              String
+  pincode            String
+  notes              String?       @db.Text
+  locale             String        @default("en")
+  subtotal           Decimal       @db.Decimal(10, 2)
+  shippingFee        Decimal       @db.Decimal(10, 2)
+  total              Decimal       @db.Decimal(10, 2)
+  currency           String        @default("INR")
+  // Set the first time the confirmation page reports the GA4 purchase event.
+  analyticsTrackedAt DateTime?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  items              OrderItem[]
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  sku       String
+  name      String
+  unitPrice Decimal @db.Decimal(10, 2)
+  quantity  Int
+  lineTotal Decimal @db.Decimal(10, 2)
+}
