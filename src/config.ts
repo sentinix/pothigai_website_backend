@@ -21,5 +21,8 @@ export const config = {
     .map((o) => o.trim())
     .filter(Boolean),
   uploadDir: process.env.UPLOAD_DIR ?? "./uploads",
+  // Number of reverse proxies in front of the API whose X-Forwarded-For entries
+  // are trusted for the client IP (used by the login rate limiter).
+  trustProxyHops: Number(process.env.TRUST_PROXY_HOPS ?? 1),
   isTest: process.env.NODE_ENV === "test",
 };
