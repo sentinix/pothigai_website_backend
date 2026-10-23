@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: pothigai
+          POSTGRES_PASSWORD: pothigai
+          POSTGRES_DB: pothigai_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U pothigai"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://pothigai:pothigai@localhost:5432/pothigai_test
+      # Only used so `prisma generate`/config loading succeed; tests set their own values.
+      DATABASE_URL: postgresql://pothigai:pothigai@localhost:5432/pothigai_test
+      JWT_SECRET: ci-only-secret-ci-only-secret-0123456789
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build

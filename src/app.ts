@@ -11,7 +11,7 @@ import { publicRouter } from "./routes/public.js";
 export function createApp() {
   const app = express();
   app.disable("x-powered-by");
-  app.set("trust proxy", 1);
+  app.set("trust proxy", config.trustProxyHops);
   app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
   app.use(cors({ origin: config.corsOrigins.length ? config.corsOrigins : false }));
   app.use(express.json({ limit: "1mb" }));
